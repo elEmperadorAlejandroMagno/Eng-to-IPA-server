@@ -11,6 +11,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(__file__))
 from transcription_service_modular import create_transcription_service
+from external_fallback import create_fallback_service
 from config import config
 
 # Initialize FastAPI app
@@ -31,6 +32,9 @@ app.add_middleware(
 
 # Initialize transcription service
 transcription_service = create_transcription_service()
+
+# Initialize external fallback service
+fallback_service = create_fallback_service(timeout=5)
 
 
 class TranscribeRequest(BaseModel):
@@ -69,12 +73,28 @@ def get_ipa(word: str = Query(..., description="Word to transcribe")):
         ipa_american_raw = transcription_service.db_lookup(word, 'american')
         ipa_rp_raw = transcription_service.db_lookup(word, 'rp')
         
+        source = 'database'
+        
+        # If not found in database, try external fallback
         if not ipa_american_raw and not ipa_rp_raw:
-            return {"word": word, "found": False, "american": None, "rp": None}
+            fallback_result = fallback_service.fetch_ipa(word)
+            
+            if fallback_result:
+                source = fallback_result['source']
+                ipa_american_raw = fallback_result['data'].get('american')
+                ipa_rp_raw = fallback_result['data'].get('rp')
+            
+            # If still not found, raise 404 error
+            if not ipa_american_raw and not ipa_rp_raw:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Word '{word}' not found in database or external sources."
+                )
         
         result = {
             "word": word,
             "found": True,
+            "source": source,
             "american": None,
             "rp": None
         }
@@ -149,4 +169,21 @@ def post_transcribe(req: TranscribeRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host=config.HOST, port=config.PORT)
+    import socket
+    
+    def find_free_port(start_port: int = 8002, max_attempts: int = 10) -> int:
+        """Find a free port starting from start_port"""
+        for port in range(start_port, start_port + max_attempts):
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                try:
+                    s.bind((config.HOST, port))
+                    return port
+                except OSError:
+                    continue
+        raise RuntimeError(f"Could not find a free port after {max_attempts} attempts")
+    
+    port = find_free_port(config.PORT)
+    if port != config.PORT:
+        print(f"Port {config.PORT} is busy, using port {port} instead")
+    
+    uvicorn.run(app, host=config.HOST, port=port)

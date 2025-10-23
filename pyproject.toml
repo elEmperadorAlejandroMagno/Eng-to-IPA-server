@@ -1,0 +1,18 @@
+[project]
+name = "eng-to-ipa-server"
+version = "1.0.0"
+description = "IPA Transcription API - Convert English text to International Phonetic Alphabet with American and RP British accents"
+requires-python = ">=3.12"
+dependencies = [
+    "beautifulsoup4>=4.14.2",
+    "fastapi>=0.119.1",
+    "orjson>=3.11.3",
+    "pydantic>=2.12.3",
+    "python-dotenv>=1.1.1",
+    "python-multipart>=0.0.20",
+    "requests>=2.32.5",
+    "uvicorn>=0.38.0",
+]
+
+[tool.uv]
+dev-dependencies = []

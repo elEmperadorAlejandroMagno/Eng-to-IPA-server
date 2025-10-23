@@ -44,6 +44,18 @@ class ModularIPATranscriptionService:
         """Simple word lookup - delegates to database service"""
         return self.db_service.lookup_word(word, accent)
     
+    def db_lookup(self, word: str, accent: str) -> Optional[str]:
+        """Alias for lookup_word for backward compatibility"""
+        return self.lookup_word(word, accent)
+    
+    def parse_weak_strong_format(self, ipa_text: str):
+        """Parse weak/strong format - delegates to parser"""
+        return self.parser.parse_format(ipa_text)
+    
+    def apply_character_corrections(self, text: str, accent: str) -> str:
+        """Apply character corrections - delegates to character corrector"""
+        return self.character_corrector.transform(text, accent)
+    
     def get_transcription_with_forms(self, word: str, accent: str, use_weak: bool, 
                                    word_index: int, all_words: List[str]) -> Optional[str]:
         """
