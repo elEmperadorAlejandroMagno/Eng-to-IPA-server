@@ -204,7 +204,7 @@ class IPATranscriptionService:
         
         return transformed
     
-    def transcribe_text(self, text: str, accent: str, use_weak: bool, ignore_stress: bool) -> Dict[str, any]:
+    def transcribe_text(self, text: str, accent: str, use_weak: bool) -> Dict[str, any]:
         """Main transcription function with all phonetic rules applied
         
         Returns:
@@ -244,9 +244,6 @@ class IPATranscriptionService:
         # Apply RP symbol transformations
         if accent == 'rp':
             result = self.apply_rp_symbol_transforms(result)
-        
-        if ignore_stress:
-            result = result.replace('ˈ', '').replace('ˌ', '')
         
         return {
             'transcription': result.strip(),

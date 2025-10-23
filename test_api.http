@@ -1,11 +1,20 @@
 ### Variables
-@baseUrl = http://0.0.0.0:8003
+@baseUrl = http://0.0.0.0:8002
 
 ### Health Check
 GET {{baseUrl}}/health
 
 ### Root endpoint
 GET {{baseUrl}}/
+
+###
+POST {{baseUrl}}/transcribe
+Content-Type: application/json
+
+{
+  "text": "This is a sample text to transcribe.",
+  "accent": "rp"
+}
 
 ### Test 1: Word found in database (hello)
 GET {{baseUrl}}/ipa?word=hello
