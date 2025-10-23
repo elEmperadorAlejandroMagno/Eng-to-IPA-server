@@ -204,10 +204,15 @@ class IPATranscriptionService:
         
         return transformed
     
-    def transcribe_text(self, text: str, accent: str, use_weak: bool, ignore_stress: bool) -> str:
-        """Main transcription function with all phonetic rules applied"""
+    def transcribe_text(self, text: str, accent: str, use_weak: bool, ignore_stress: bool) -> Dict[str, any]:
+        """Main transcription function with all phonetic rules applied
+        
+        Returns:
+            Dict with 'transcription' (str) and 'not_found' (List[str])
+        """
         tokens = re.findall(r"\b\w+'\w+\b|\b\w+\b|[.,!?;:'-]", text) or []
         out: List[str] = []
+        not_found_words: List[str] = []
         
         for i, tok in enumerate(tokens):
             if self.punct_re.match(tok):
@@ -222,8 +227,9 @@ class IPATranscriptionService:
                 ipa = self.apply_character_corrections(ipa, accent)
                 out.append(ipa)
             else:
-                # Fallback: palabra no encontrada
-                out.append(tok)
+                # Fallback: palabra no encontrada - marcar con asteriscos
+                out.append(f"*{tok}*")
+                not_found_words.append(tok)
         
         # Apply Linking R for RP (pass both transcribed and original words)
         if accent == 'rp':
@@ -242,7 +248,10 @@ class IPATranscriptionService:
         if ignore_stress:
             result = result.replace('ˈ', '').replace('ˌ', '')
         
-        return result.strip()
+        return {
+            'transcription': result.strip(),
+            'not_found': not_found_words
+        }
 
 
 def create_transcription_service(db_path: str = None) -> IPATranscriptionService:

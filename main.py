@@ -62,27 +62,46 @@ def health_check():
 
 
 @app.get("/ipa")
-def get_ipa(word: str = Query(..., description="Word to transcribe"), 
-            accent: str = Query("american", description="Accent: 'american' or 'rp'")):
-    """Get IPA transcription for a single word"""
+def get_ipa(word: str = Query(..., description="Word to transcribe")):
+    """Get all IPA transcription forms for a single word (American, RP, weak/strong)"""
     try:
-        # Validate accent
-        if accent.lower() not in ['american', 'rp']:
-            raise HTTPException(status_code=400, detail="Accent must be 'american' or 'rp'")
+        # Get raw data from database for both accents
+        ipa_american_raw = transcription_service.db_lookup(word, 'american')
+        ipa_rp_raw = transcription_service.db_lookup(word, 'rp')
         
-        # Normalize accent
-        normalized_accent = 'american' if accent.lower().startswith('a') else 'rp'
+        if not ipa_american_raw and not ipa_rp_raw:
+            return {"word": word, "found": False, "american": None, "rp": None}
         
-        # Get IPA from database
-        ipa = transcription_service.db_lookup(word, normalized_accent)
+        result = {
+            "word": word,
+            "found": True,
+            "american": None,
+            "rp": None
+        }
         
-        if not ipa:
-            return {"word": word, "ipa": None, "accent": normalized_accent, "found": False}
+        # Process American accent
+        if ipa_american_raw:
+            corrected = transcription_service.apply_character_corrections(ipa_american_raw, 'american')
+            result["american"] = corrected
         
-        # Apply character corrections
-        ipa = transcription_service.apply_character_corrections(ipa, normalized_accent)
+        # Process RP accent with weak/strong forms
+        if ipa_rp_raw:
+            parsed = transcription_service.parse_weak_strong_format(ipa_rp_raw)
+            
+            if 'strong' in parsed and 'weak' in parsed:
+                # Has weak and strong forms
+                strong = transcription_service.apply_character_corrections(parsed['strong'], 'rp')
+                weak = transcription_service.apply_character_corrections(parsed['weak'], 'rp')
+                result["rp"] = {
+                    "strong": strong,
+                    "weak": weak
+                }
+            elif 'single' in parsed:
+                # Only one form
+                single = transcription_service.apply_character_corrections(parsed['single'], 'rp')
+                result["rp"] = single
         
-        return {"word": word, "ipa": ipa, "accent": normalized_accent, "found": True}
+        return result
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing word: {str(e)}")
@@ -113,7 +132,8 @@ def post_transcribe(req: TranscribeRequest):
         return {
             "text": req.text,
             "accent": normalized_accent,
-            "ipa": result,
+            "ipa": result['transcription'],
+            "notFound": result['not_found'],
             "options": {
                 "useWeakForms": req.useWeakForms,
                 "ignoreStress": req.ignoreStress,
