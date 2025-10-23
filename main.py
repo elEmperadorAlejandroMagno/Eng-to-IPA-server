@@ -145,8 +145,7 @@ def post_transcribe(req: TranscribeRequest):
         result = transcription_service.transcribe_text(
             text=req.text,
             accent=normalized_accent,
-            use_weak=req.useWeakForms,
-            ignore_stress=req.ignoreStress
+            use_weak= True,
         )
         
         return {
@@ -155,8 +154,6 @@ def post_transcribe(req: TranscribeRequest):
             "ipa": result['transcription'],
             "notFound": result['not_found'],
             "options": {
-                "useWeakForms": req.useWeakForms,
-                "ignoreStress": req.ignoreStress,
                 "applySimplification": req.applySimplification
             }
         }

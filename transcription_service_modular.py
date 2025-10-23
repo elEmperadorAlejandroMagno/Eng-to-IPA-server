@@ -3,7 +3,7 @@ Modular IPA Transcription Service
 Refactored version using composition and specialized modules for better maintainability.
 """
 import re
-from typing import Optional, List
+from typing import Optional, List, Dict
 import os
 
 from database_service import DatabaseService
@@ -106,7 +106,7 @@ class ModularIPATranscriptionService:
         # For American or simple format, return as-is
         return ipa_raw
     
-    def process_word_list(self, tokens: List[str], accent: str, use_weak: bool) -> List[str]:
+    def process_word_list(self, tokens: List[str], accent: str, use_weak: bool) -> tuple[List[str], List[str]]:
         """
         Process a list of tokens into IPA transcriptions
         
@@ -116,9 +116,10 @@ class ModularIPATranscriptionService:
             use_weak: Whether to use weak forms
             
         Returns:
-            List of IPA transcriptions
+            Tuple of (transcribed_words, not_found_words)
         """
         transcribed_words = []
+        not_found_words = []
         
         for i, token in enumerate(tokens):
             if self.punct_re.match(token):
@@ -133,13 +134,14 @@ class ModularIPATranscriptionService:
                 ipa = self.character_corrector.transform(ipa, accent)
                 transcribed_words.append(ipa)
             else:
-                # Fallback: word not found
-                transcribed_words.append(token)
+                # Fallback: word not found - mark with asterisks
+                transcribed_words.append(f"*{token}*")
+                not_found_words.append(token)
         
-        return transcribed_words
+        return transcribed_words, not_found_words
     
     def apply_post_processing(self, transcribed_words: List[str], original_tokens: List[str], 
-                            accent: str, ignore_stress: bool) -> str:
+                            accent: str) -> str:
         """
         Apply all post-processing rules to transcribed words
         
@@ -168,13 +170,9 @@ class ModularIPATranscriptionService:
         # Apply RP symbol transformations
         result = self.rp_symbol_transformer.transform(result, accent)
         
-        # Remove stress markers if requested
-        if ignore_stress:
-            result = self.stress_remover.transform(result, accent)
-        
         return result.strip()
     
-    def transcribe_text(self, text: str, accent: str, use_weak: bool, ignore_stress: bool) -> str:
+    def transcribe_text(self, text: str, accent: str, use_weak: bool) -> Dict[str, any]:
         """
         Main transcription method - orchestrates the entire process
         
@@ -185,18 +183,21 @@ class ModularIPATranscriptionService:
             ignore_stress: Whether to remove stress markers
             
         Returns:
-            IPA transcription with all rules applied
+            Dict with 'transcription' (str) and 'not_found' (List[str])
         """
         # Tokenize input text
         tokens = re.findall(r"\b\w+'\w+\b|\b\w+\b|[.,!?;:'-]", text) or []
         
         # Process words into IPA
-        transcribed_words = self.process_word_list(tokens, accent, use_weak)
+        transcribed_words, not_found_words = self.process_word_list(tokens, accent, use_weak)
         
         # Apply post-processing
-        result = self.apply_post_processing(transcribed_words, tokens, accent, ignore_stress)
+        result = self.apply_post_processing(transcribed_words, tokens, accent)
         
-        return result
+        return {
+            'transcription': result,
+            'not_found': not_found_words
+        }
     
     # Configuration methods for customization
     
