@@ -1,0 +1,54 @@
+### Variables
+@baseUrl = http://0.0.0.0:8003
+
+### Health Check
+GET {{baseUrl}}/health
+
+### Root endpoint
+GET {{baseUrl}}/
+
+### Test 1: Word found in database (hello)
+GET {{baseUrl}}/ipa?word=hello
+
+### Test 2: Word with weak/strong forms (and)
+GET {{baseUrl}}/ipa?word=and
+
+### Test 3: Word found in database (beautiful)
+GET {{baseUrl}}/ipa?word=beautiful
+
+### Test 4: Word NOT in database - should try Wiktionary fallback (cryptocurrency)
+GET {{baseUrl}}/ipa?word=cryptocurrency
+
+### Test 5: Word NOT in database - should try Wiktionary fallback (algorithm)
+GET {{baseUrl}}/ipa?word=algorithm
+
+### Test 6: Non-existent word - should return 404
+GET {{baseUrl}}/ipa?word=asdfghqwerty
+
+### Test 7: Common word (the)
+GET {{baseUrl}}/ipa?word=the
+
+### Test 8: Word with different pronunciations (read)
+GET {{baseUrl}}/ipa?word=read
+
+### Test 9: Transcribe full text with notFound feedback
+POST {{baseUrl}}/transcribe
+Content-Type: application/json
+
+{
+  "text": "Hello world, this is a test with unknownword123 in it.",
+  "accent": "american",
+  "useWeakForms": true,
+  "ignoreStress": false
+}
+
+### Test 10: Transcribe with RP accent
+POST {{baseUrl}}/transcribe
+Content-Type: application/json
+
+{
+  "text": "The quick brown fox jumps over the lazy dog.",
+  "accent": "rp",
+  "useWeakForms": true,
+  "ignoreStress": false
+}
