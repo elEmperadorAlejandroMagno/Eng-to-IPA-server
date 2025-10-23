@@ -21,7 +21,6 @@ class Config:
     # CORS Configuration
     _cors_env = os.getenv('CORS_ORIGINS', '')
     CORS_ORIGINS: List[str] = _cors_env.split(',') if _cors_env else []
-    CORS_ORIGINS.append('http://0.0.0.0:8003')
     
     # API Configuration
     API_TITLE: str = os.getenv('API_TITLE', 'IPA Transcription API')
