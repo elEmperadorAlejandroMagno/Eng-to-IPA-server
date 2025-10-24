@@ -1,11 +1,11 @@
-"""
-External IPA Fallback Service
+"""External IPA Fallback Service
 Consulta Wiktionary y otros diccionarios cuando una palabra no se encuentra en la DB local.
 """
 import requests
 import re
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 from bs4 import BeautifulSoup
+import concurrent.futures
 
 
 class ExternalIPAFallback:
@@ -74,24 +74,95 @@ class ExternalIPAFallback:
             print(f"Error fetching from Wiktionary: {e}")
             return None
     
-    def fetch_ipa(self, word: str) -> Optional[Dict[str, any]]:
+    def fetch_from_cambridge(self, word: str) -> Optional[Dict[str, any]]:
         """
-        Intenta obtener IPA de múltiples fuentes
+        Obtiene transcripciones IPA de Cambridge Dictionary
         
         Returns:
-            Dict con transcripciones encontradas y la fuente
+            Dict con 'american' y 'rp' o None si no se encuentra
         """
-        # Intentar Wiktionary primero
-        wiktionary_result = self.fetch_from_wiktionary(word)
-        if wiktionary_result:
-            return {
-                'source': 'wiktionary',
-                'data': wiktionary_result
+        try:
+            url = f"https://dictionary.cambridge.org/dictionary/english/{word.lower()}"
+            response = self.session.get(url, timeout=self.timeout)
+            
+            if response.status_code != 200:
+                return None
+            
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            result = {
+                'american': None,
+                'rp': None
             }
+            
+            # Buscar pronunciaciones en Cambridge
+            # Cambridge usa span class="ipa" dentro de divs con class="us dpron-i" y "uk dpron-i"
+            
+            # UK/RP pronunciation
+            uk_section = soup.find('span', class_='uk')
+            if uk_section:
+                ipa_span = uk_section.find('span', class_='ipa')
+                if ipa_span:
+                    ipa_text = ipa_span.get_text().strip()
+                    ipa_text = re.sub(r'^/(.+)/$', r'\1', ipa_text)
+                    result['rp'] = ipa_text
+            
+            # US pronunciation
+            us_section = soup.find('span', class_='us')
+            if us_section:
+                ipa_span = us_section.find('span', class_='ipa')
+                if ipa_span:
+                    ipa_text = ipa_span.get_text().strip()
+                    ipa_text = re.sub(r'^/(.+)/$', r'\1', ipa_text)
+                    result['american'] = ipa_text
+            
+            if result['american'] or result['rp']:
+                return result
+            
+            return None
+            
+        except Exception as e:
+            print(f"Error fetching from Cambridge: {e}")
+            return None
+    
+    def fetch_ipa(self, word: str) -> List[Dict[str, any]]:
+        """
+        Obtiene IPA de múltiples fuentes simultáneamente
         
-        # Aquí se pueden agregar más fuentes (Longman, etc.)
+        Returns:
+            Lista de resultados de diferentes fuentes
+        """
+        results = []
         
-        return None
+        # Ejecutar consultas en paralelo
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            # Iniciar consultas
+            future_wiktionary = executor.submit(self.fetch_from_wiktionary, word)
+            future_cambridge = executor.submit(self.fetch_from_cambridge, word)
+            
+            # Recoger resultados de Wiktionary
+            try:
+                wiktionary_data = future_wiktionary.result()
+                if wiktionary_data:
+                    results.append({
+                        'source': 'wiktionary',
+                        'data': wiktionary_data
+                    })
+            except Exception as e:
+                print(f"Wiktionary fetch failed: {e}")
+            
+            # Recoger resultados de Cambridge
+            try:
+                cambridge_data = future_cambridge.result()
+                if cambridge_data:
+                    results.append({
+                        'source': 'cambridge',
+                        'data': cambridge_data
+                    })
+            except Exception as e:
+                print(f"Cambridge fetch failed: {e}")
+        
+        return results
 
 
 def create_fallback_service(timeout: int = 5) -> ExternalIPAFallback:

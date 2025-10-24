@@ -67,62 +67,82 @@ def health_check():
 
 @app.get("/ipa")
 def get_ipa(word: str = Query(..., description="Word to transcribe")):
-    """Get all IPA transcription forms for a single word (American, RP, weak/strong)"""
+    """Get all IPA transcription forms for a single word from multiple sources"""
     try:
-        # Get raw data from database for both accents
+        sources = []
+        
+        # 1. Obtener de la base de datos local
         ipa_american_raw = transcription_service.db_lookup(word, 'american')
         ipa_rp_raw = transcription_service.db_lookup(word, 'rp')
         
-        source = 'database'
-        
-        # If not found in database, try external fallback
-        if not ipa_american_raw and not ipa_rp_raw:
-            fallback_result = fallback_service.fetch_ipa(word)
+        if ipa_american_raw or ipa_rp_raw:
+            db_result = {
+                "source": "database",
+                "american": None,
+                "rp": None
+            }
             
-            if fallback_result:
-                source = fallback_result['source']
-                ipa_american_raw = fallback_result['data'].get('american')
-                ipa_rp_raw = fallback_result['data'].get('rp')
+            # Process American accent
+            if ipa_american_raw:
+                corrected = transcription_service.apply_character_corrections(ipa_american_raw, 'american')
+                db_result["american"] = corrected
             
-            # If still not found, raise 404 error
-            if not ipa_american_raw and not ipa_rp_raw:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Word '{word}' not found in database or external sources."
-                )
+            # Process RP accent with weak/strong forms
+            if ipa_rp_raw:
+                parsed = transcription_service.parse_weak_strong_format(ipa_rp_raw)
+                
+                if 'strong' in parsed and 'weak' in parsed:
+                    strong = transcription_service.apply_character_corrections(parsed['strong'], 'rp')
+                    weak = transcription_service.apply_character_corrections(parsed['weak'], 'rp')
+                    db_result["rp"] = {
+                        "strong": strong,
+                        "weak": weak
+                    }
+                elif 'single' in parsed:
+                    single = transcription_service.apply_character_corrections(parsed['single'], 'rp')
+                    db_result["rp"] = single
+            
+            sources.append(db_result)
         
-        result = {
+        # 2. Obtener de fuentes externas (siempre)
+        external_results = fallback_service.fetch_ipa(word)
+        
+        for ext_result in external_results:
+            source_data = {
+                "source": ext_result['source'],
+                "american": None,
+                "rp": None
+            }
+            
+            data = ext_result['data']
+            
+            # Process American
+            if data.get('american'):
+                corrected = transcription_service.apply_character_corrections(data['american'], 'american')
+                source_data["american"] = corrected
+            
+            # Process RP
+            if data.get('rp'):
+                corrected = transcription_service.apply_character_corrections(data['rp'], 'rp')
+                source_data["rp"] = corrected
+            
+            sources.append(source_data)
+        
+        # Si no se encontró nada en ninguna fuente
+        if not sources:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Word '{word}' not found in any source."
+            )
+        
+        return {
             "word": word,
             "found": True,
-            "source": source,
-            "american": None,
-            "rp": None
+            "sources": sources
         }
         
-        # Process American accent
-        if ipa_american_raw:
-            corrected = transcription_service.apply_character_corrections(ipa_american_raw, 'american')
-            result["american"] = corrected
-        
-        # Process RP accent with weak/strong forms
-        if ipa_rp_raw:
-            parsed = transcription_service.parse_weak_strong_format(ipa_rp_raw)
-            
-            if 'strong' in parsed and 'weak' in parsed:
-                # Has weak and strong forms
-                strong = transcription_service.apply_character_corrections(parsed['strong'], 'rp')
-                weak = transcription_service.apply_character_corrections(parsed['weak'], 'rp')
-                result["rp"] = {
-                    "strong": strong,
-                    "weak": weak
-                }
-            elif 'single' in parsed:
-                # Only one form
-                single = transcription_service.apply_character_corrections(parsed['single'], 'rp')
-                result["rp"] = single
-        
-        return result
-        
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing word: {str(e)}")
 
